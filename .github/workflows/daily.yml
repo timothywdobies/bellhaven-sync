@@ -1,0 +1,42 @@
+# Runs the pipeline once a day. It only reads the website and CRM, then saves the new
+# review queue to the repo. Approvals and CRM writes happen only in the local review app.
+name: Daily Bellhaven sync
+
+on:
+  schedule:
+    - cron: "0 11 * * *"  # 11:00 UTC every day
+  workflow_dispatch:      # Also allows a manual run from the Actions tab
+
+permissions:
+  contents: write         # Needed to save the review queue back to the repo
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          python tests/test_match.py
+          python tests/test_flow.py
+
+      - name: Run pipeline
+        env:
+          CRM_API_TOKEN: ${{ secrets.CRM_API_TOKEN }}
+        run: python pipeline.py
+
+      - name: Save the review queue
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          git diff --cached --quiet || git commit -m "Daily review queue update"
+          git push
